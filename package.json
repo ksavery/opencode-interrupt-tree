@@ -1,0 +1,15 @@
+{
+  "name": "opencode-interrupt-tree",
+  "version": "0.1.0",
+  "description": "Interrupt an OpenCode session and all recursive subagents with one shortcut.",
+  "license": "MIT",
+  "private": false,
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "tui"
+  ],
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.0"
+  }
+}
