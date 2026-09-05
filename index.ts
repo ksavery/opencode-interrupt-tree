@@ -1,40 +1,49 @@
 import type { TuiPluginModule } from "@opencode-ai/plugin/tui"
 
-const command = "plugin.interrupt-session-tree"
-const defaultKeybind = "ctrl+escape"
+const defaultEscapeWindowMs = 600
 
 type ChildSession = { id?: string }
 type ListChildren = (parameters: { parentID: string }) => Promise<{ data?: ChildSession[] }>
+type KeyAfterContext = {
+  event: { name?: string; eventType?: string; repeat?: boolean }
+  eventType?: string
+}
+type KeymapWithInterceptor = {
+  intercept: (
+    phase: "key:after",
+    handler: (context: KeyAfterContext) => void,
+    options?: { priority?: number },
+  ) => () => void
+}
 
 const plugin: TuiPluginModule = {
   id: "interrupt-session-tree",
   async tui(api, options) {
-    const keybind = typeof options?.keybind === "string" && options.keybind.length > 0
-      ? options.keybind
-      : defaultKeybind
+    const escapeWindowMs = typeof options?.escapeWindowMs === "number"
+      && Number.isFinite(options.escapeWindowMs)
+      && options.escapeWindowMs > 0
+      ? options.escapeWindowMs
+      : defaultEscapeWindowMs
     let running = false
+    let escapeCount = 0
+    let lastEscapeAt = 0
 
-    const interruptSessionTree = async () => {
+    const interruptDescendants = async (parentID: string) => {
       if (running) return
-      if (api.route.current.name !== "session") {
-        api.ui.toast({ variant: "info", message: "No session is currently displayed." })
-        return
-      }
-
       running = true
+
       try {
-        const currentSessionID = api.route.current.params.sessionID
         const failed: string[] = []
         const ordered: string[] = []
-        const seen = new Set<string>([currentSessionID])
+        const seen = new Set<string>([parentID])
         const listChildren = api.client.session.list as unknown as ListChildren
 
-        const visit = async (parentID: string): Promise<void> => {
+        const visit = async (ancestorID: string): Promise<void> => {
           let children: ChildSession[]
           try {
-            children = (await listChildren({ parentID })).data ?? []
+            children = (await listChildren({ parentID: ancestorID })).data ?? []
           } catch {
-            failed.push(`listing children of ${parentID}`)
+            failed.push(`listing children of ${ancestorID}`)
             return
           }
 
@@ -46,8 +55,7 @@ const plugin: TuiPluginModule = {
           }
         }
 
-        await visit(currentSessionID)
-        ordered.push(currentSessionID)
+        await visit(parentID)
 
         for (const sessionID of ordered) {
           try {
@@ -60,12 +68,14 @@ const plugin: TuiPluginModule = {
         if (failed.length > 0) {
           api.ui.toast({
             variant: "warning",
-            message: `Session tree interrupted with ${failed.length} failure${failed.length === 1 ? "" : "s"}.`,
+            message: `Descendant cancellation finished with ${failed.length} failure${failed.length === 1 ? "" : "s"}.`,
           })
+        } else if (ordered.length === 0) {
+          api.ui.toast({ variant: "info", message: "No descendant sessions to interrupt." })
         } else {
           api.ui.toast({
             variant: "success",
-            message: `Interrupted ${ordered.length} session${ordered.length === 1 ? "" : "s"} in the session tree.`,
+            message: `Interrupted ${ordered.length} descendant session${ordered.length === 1 ? "" : "s"}.`,
           })
         }
       } finally {
@@ -73,17 +83,27 @@ const plugin: TuiPluginModule = {
       }
     }
 
-    api.keymap.registerLayer({
-      commands: [
-        {
-          name: command,
-          title: "Interrupt session tree",
-          category: "Session",
-          run: interruptSessionTree,
-        },
-      ],
-      bindings: [{ key: keybind, cmd: command, desc: "Interrupt session tree", group: "Session" }],
-    })
+    const unregister = (api.keymap as unknown as KeymapWithInterceptor).intercept(
+      "key:after",
+      (context) => {
+        if (context.event.name !== "escape") return
+        if (context.event.repeat) return
+        if (context.eventType === "release" || context.event.eventType === "release") return
+        if (api.ui.dialog.open || api.route.current.name !== "session") return
+
+        const now = Date.now()
+        escapeCount = now - lastEscapeAt <= escapeWindowMs ? escapeCount + 1 : 1
+        lastEscapeAt = now
+
+        if (escapeCount !== 3) return
+        escapeCount = 0
+        const parentID = api.route.current.params.sessionID
+        queueMicrotask(() => void interruptDescendants(parentID))
+      },
+      { priority: -10_000 },
+    )
+
+    api.lifecycle.onDispose(unregister)
   },
 }
 

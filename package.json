@@ -1,7 +1,7 @@
 {
   "name": "opencode-interrupt-tree",
-  "version": "0.1.0",
-  "description": "Interrupt an OpenCode session and all recursive subagents with one shortcut.",
+  "version": "0.2.0",
+  "description": "Interrupt recursive OpenCode subagents with a third rapid Escape press.",
   "license": "MIT",
   "private": false,
   "keywords": [

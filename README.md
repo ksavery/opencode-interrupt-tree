@@ -1,7 +1,7 @@
 # opencode-interrupt-tree
 
-An OpenCode TUI plugin that adds `Ctrl+Escape` to interrupt the displayed
-session and every recursive subagent without sending an LLM message.
+An OpenCode TUI plugin that uses a third rapid `Escape` press to interrupt
+every recursive subagent without sending an LLM message.
 
 ## Install
 
@@ -21,7 +21,7 @@ the `plugin` array:
   "plugin": [
     [
       "./plugins/interrupt-session-tree/index.ts",
-      { "keybind": "ctrl+escape" }
+      { "escapeWindowMs": 600 }
     ]
   ]
 }
@@ -31,24 +31,27 @@ Restart OpenCode after changing its configuration.
 
 ## Behavior
 
-When triggered from a session, the plugin finds every descendant session,
-interrupts descendants first, then interrupts the displayed session. It uses
-OpenCode's native session interrupt API and does not create a chat message or
-invoke an LLM.
+OpenCode keeps its native Escape behavior. Press Escape three times within the
+configured time window:
 
-The configured keybind defaults to `ctrl+escape` and can be changed without
-editing the plugin:
+- The first two presses retain OpenCode's normal interruption behavior.
+- The third press interrupts every descendant session, deepest-first.
+
+The plugin uses OpenCode's native session interrupt API and does not create a
+chat message or invoke an LLM.
+
+`escapeWindowMs` defaults to `600` and can be changed without editing the
+plugin:
 
 ```json
-{ "keybind": "ctrl+g" }
+{ "escapeWindowMs": 800 }
 ```
 
 ## Limitations
 
-- The terminal must emit `Ctrl+Escape` as a distinct key sequence. If it does
-  not, configure another keybind.
 - The shortcut interrupts only the displayed session and its descendants, not
   unrelated OpenCode sessions.
+- OpenCode's native bottom-left Escape hint is not exposed to plugins.
 
 ## License
 
